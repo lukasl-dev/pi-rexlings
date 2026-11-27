@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { delimiter, isAbsolute, join, resolve } from "node:path";
 
 export interface Config {
-  terminal: { naming: "random" | "task"; prefix: string };
+  terminal: { naming: "random" | "task"; prefix: string; mute: boolean };
   piCommand: string[];
 }
 
@@ -27,15 +27,22 @@ export function parseConfig(value: unknown): Config {
   if (!object(terminal)) {
     throw new Error("terminal must be an object");
   }
-  if (Object.keys(terminal).some((k) => !["naming", "prefix"].includes(k))) {
-    throw new Error("Unknown terminal option (supported: naming, prefix)");
+  if (
+    Object.keys(terminal).some((k) => !["naming", "prefix", "mute"].includes(k))
+  ) {
+    throw new Error(
+      "Unknown terminal option (supported: naming, prefix, mute)",
+    );
   }
   const naming = terminal.naming ?? "random";
   const prefix = terminal.prefix ?? "";
+  const mute = terminal.mute === undefined ? false : terminal.mute;
   const piCommand = value.piCommand ?? ["pi"];
   if (naming !== "random" && naming !== "task") {
     throw new Error("terminal.naming must be random or task");
   }
+  if (typeof mute !== "boolean")
+    throw new Error("terminal.mute must be a boolean");
   if (
     typeof prefix !== "string" ||
     !/^(?:[a-z0-9][a-z0-9-]{0,11})?$/.test(prefix)
@@ -53,7 +60,7 @@ export function parseConfig(value: unknown): Config {
   ) {
     throw new Error("piCommand must be a nonempty executable/argument array");
   }
-  return { terminal: { naming, prefix }, piCommand };
+  return { terminal: { naming, prefix, mute }, piCommand };
 }
 
 export function absolutePath(value: unknown): value is string {

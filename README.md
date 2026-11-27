@@ -52,14 +52,20 @@ until the report arrives.
 
 The Pi profile (`$PI_CODING_AGENT_DIR`, default `~/.pi/agent`) can contain
 `rexlings/config.json` with `piCommand` (command and arguments),
-`terminal.naming` (`random` or `task`), and `terminal.prefix`.
+`terminal.naming` (`random` or `task`), `terminal.prefix`, and `terminal.mute`.
 
 ```json
 {
   "piCommand": ["pi"],
-  "terminal": { "naming": "task", "prefix": "review" }
+  "terminal": { "naming": "task", "prefix": "review", "mute": true }
 }
 ```
+
+`mute` defaults to `false`. It asks connected Rex apps to mute each child tab,
+including its error and blocker notifications. The client must support
+`client.tab.mute` and allow remote control. Rune enables this per host and
+shows an in-app notice when a tab is muted. If muting fails, the child still
+runs and reports normally.
 
 Run files stay under `rexlings/runs/` on the parent and `rexlings/incoming/`
 on the remote host. Children are not sandboxed.

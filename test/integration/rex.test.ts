@@ -858,6 +858,104 @@ test(
 );
 
 test(
+  "child tab muting targets connected apps without making their approval a launch requirement",
+  { timeout: 30_000 },
+  async (t) => {
+    const f = await fixture(t);
+    const [denied, allowed, cli, disconnected] = Array.from(
+      { length: 4 },
+      () => `client:${randomUUID()}`,
+    );
+    const target = (
+      client_id: string,
+      kind = "app",
+      connection_state = "connected",
+    ) => ({
+      client_id,
+      info: { kind },
+      connection_state,
+    });
+    const shim = join(f.dir, "mute-rex");
+    const calls = join(f.dir, "mute-calls");
+    writeFileSync(
+      join(f.dir, "mute-clients.json"),
+      JSON.stringify({
+        clients: [
+          target(denied!),
+          target(allowed!),
+          target(cli!, "cli"),
+          target(disconnected!, "app", "disconnected"),
+          target("short-id"),
+        ],
+      }),
+    );
+    writeFileSync(
+      shim,
+      `#!/bin/sh
+for arg do
+  case "$arg" in
+    client)
+      printf 'list\\n' >> '${calls}'
+      exec cat '${join(f.dir, "mute-clients.json")}' ;;
+    -C)
+      while [ "$1" != -C ]; do shift; done
+      printf '%s %s %s\\n' "$2" "$4" "$6" >> '${calls}'
+      [ "$2" != '${denied}' ] ; exit "$?" ;;
+    api|whoami|events|wait|capture) break ;;
+  esac
+done
+exec rex "$@"
+`,
+      { mode: 0o700 },
+    );
+    const normal = new Host({ ...f.options, rex: shim });
+    t.after(() => normal.shutdown(true));
+    await normal.start();
+    const first = await normal.launch({
+      ...model,
+      task: "fixture",
+      cwd: f.cwd,
+    });
+    const report = await until(
+      () => f.results.find(({ run }) => run.id === first.id),
+      "normal report",
+    );
+    assert.equal(report.result.outcome, "completed");
+    assert.equal(existsSync(calls), false);
+    await normal.acknowledge(first.id);
+    await normal.shutdown(true);
+
+    const muted = new Host({
+      ...f.options,
+      rex: shim,
+      config: parseConfig({ terminal: { mute: true } }),
+    });
+    t.after(() => muted.shutdown(true));
+    await muted.start();
+    const child = await muted.launch({ ...model, task: "fixture", cwd: f.cwd });
+    assert.ok(child.window && child.window !== f.parentWindow);
+    const args = JSON.stringify({
+      session_id: f.session,
+      window_id: child.window,
+      muted: true,
+    });
+    assert.deepEqual(
+      readFileSync(calls, "utf8").trim().split("\n").sort(),
+      [
+        "list",
+        `${allowed} client.tab.mute ${args}`,
+        `${denied} client.tab.mute ${args}`,
+      ].sort(),
+    );
+    const mutedReport = await until(
+      () => f.results.find(({ run }) => run.id === child.id),
+      "muted report",
+    );
+    assert.equal(mutedReport.result.outcome, "completed");
+  },
+);
+
+test(
   "an ambiguous Rex create is not retried and the child's own ready file recovers its ID",
   { timeout: 30_000 },
   async (t) => {

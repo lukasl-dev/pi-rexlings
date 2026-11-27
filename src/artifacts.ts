@@ -48,7 +48,7 @@ export const uuid =
 
 export function rexId(
   value: unknown,
-  kind: "session" | "window" | "block",
+  kind: "session" | "window" | "block" | "client",
 ): value is string {
   return (
     typeof value === "string" &&

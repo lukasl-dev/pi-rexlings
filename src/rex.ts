@@ -209,6 +209,51 @@ export class Rex {
     return value.last_exit.exit_code;
   }
 
+  async muteTab(session: string, window: string): Promise<void> {
+    this.#connected();
+    const value: unknown = JSON.parse(
+      await this.#text(
+        ["--timeout=1s", "client", "ls", "--json"],
+        undefined,
+        1_500,
+      ),
+    );
+    if (!object(value) || !Array.isArray(value.clients)) return;
+
+    const args = JSON.stringify({
+      session_id: session,
+      window_id: window,
+      muted: true,
+    });
+    // Mute belongs to each app, not the server. A refusing app must not block the others.
+    await Promise.allSettled(
+      value.clients.flatMap((client: unknown) =>
+        object(client) &&
+        rexId(client.client_id, "client") &&
+        object(client.info) &&
+        client.info.kind === "app" &&
+        (client.connection_state === undefined ||
+          client.connection_state === "connected")
+          ? [
+              this.#text(
+                [
+                  "--timeout=1s",
+                  "-C",
+                  client.client_id,
+                  "do",
+                  "client.tab.mute",
+                  "--args",
+                  args,
+                ],
+                undefined,
+                1_500,
+              ),
+            ]
+          : [],
+      ),
+    );
+  }
+
   async interrupt(session: string, block: string): Promise<void> {
     await this.write(session, block, "\x1b");
   }

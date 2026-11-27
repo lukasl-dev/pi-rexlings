@@ -5,6 +5,7 @@ import { parseConfig, terminalName, validateName } from "../src/config.ts";
 test("defaults use short random tab names", () => {
   const config = parseConfig({});
   assert.equal(config.terminal.naming, "random");
+  assert.equal(config.terminal.mute, false);
   assert.deepEqual(config.piCommand, ["pi"]);
   const names = new Set<string>();
   for (let i = 0; i < 100; i++) {
@@ -14,6 +15,12 @@ test("defaults use short random tab names", () => {
     names.add(name);
   }
   assert.equal(names.size, 100);
+});
+
+test("muting child tabs requires an explicit boolean", () => {
+  assert.equal(parseConfig({ terminal: { mute: true } }).terminal.mute, true);
+  for (const mute of [null, "true", 1])
+    assert.throws(() => parseConfig({ terminal: { mute } }), /terminal.mute/);
 });
 
 test("name allocation retries occupied combinations and fails boundedly", () => {

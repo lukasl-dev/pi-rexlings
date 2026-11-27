@@ -283,6 +283,8 @@ export class Host {
           argv,
         );
         this.#update(run, location);
+        if (this.#options.config.terminal.mute)
+          await rex.muteTab(rexSession, location.window).catch(() => {});
         if (frame !== undefined) {
           const started = Date.now();
           let startupMs = 5_000;
