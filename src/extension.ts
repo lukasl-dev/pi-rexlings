@@ -5,9 +5,11 @@ import type {
 import { Type } from "typebox";
 import { agentDirectory, object, readConfig } from "./config.ts";
 import { Host } from "./host.ts";
+import { terminalLocation } from "./launch.ts";
 import {
   previewLimit,
   reportType,
+  rexId,
   thinkingLevels,
   type Run,
   type Thinking,
@@ -69,10 +71,11 @@ function reportId(entry: {
 }
 
 export default function extension(pi: ExtensionAPI): void {
-  const { REX_SESSION: rexSession, REX_BLOCK: parent } = process.env;
-  if (process.env.PI_REXLINGS_RUN_DIR || !rexSession || !parent) return;
+  const parent = process.env.REX_BLOCK;
+  if (process.env.PI_REXLINGS_RUN_DIR || !rexId(parent, "block")) return;
 
   let host: Host | undefined;
+  let rexSession: string | undefined;
   let diagnosis = "Rexlings has not started";
 
   function current(): Host {
@@ -84,6 +87,7 @@ export default function extension(pi: ExtensionAPI): void {
 
   pi.on("session_start", async (_event, ctx) => {
     try {
+      rexSession = terminalLocation().rexSession;
       const delivered = new Set<string>();
       for (const entry of ctx.sessionManager.getEntries()) {
         if (entry.type !== "custom_message") continue;

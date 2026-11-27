@@ -1,3 +1,4 @@
+import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -21,6 +22,56 @@ import {
   readConfig,
   validateName,
 } from "./config.ts";
+
+interface TerminalLocation {
+  rexSession: string;
+  terminal: string;
+}
+
+// Also runs in the remote bootstrap, before the bundle is installed.
+export function inspectTerminal(
+  exec: typeof execFileSync,
+  env: NodeJS.ProcessEnv,
+  id: RegExp,
+): TerminalLocation {
+  const { REX_BLOCK: terminal, REX_SERVER: server, ...local } = env;
+  delete local.REX_SESSION;
+  delete local.REX_CLIENT;
+  if (!terminal?.startsWith("block:") || !id.test(terminal.slice(6)))
+    throw new Error("Missing full REX_BLOCK ID");
+
+  const raw = exec(
+    "rex",
+    [
+      "--autostart=false",
+      "--timeout=3s",
+      ...(server?.startsWith("unix:///") ? ["-S", server] : []),
+      "block",
+      "inspect",
+      terminal,
+      "--json",
+    ],
+    { env: local, encoding: "utf8", timeout: 5_000 },
+  );
+  const record = JSON.parse(raw) as {
+    session_id?: unknown;
+    block?: { block_id?: unknown; creator_name?: unknown };
+  } | null;
+  const rexSession = record?.session_id;
+  if (
+    typeof rexSession !== "string" ||
+    !rexSession.startsWith("session:") ||
+    !id.test(rexSession.slice(8)) ||
+    record?.block?.block_id !== terminal ||
+    record.block.creator_name !== "com.superlogical.terminal"
+  )
+    throw new Error("Rex did not identify this terminal and its session");
+  return { rexSession, terminal };
+}
+
+export function terminalLocation(): TerminalLocation {
+  return inspectTerminal(execFileSync, process.env, uuid);
+}
 
 export interface Task {
   version: 1;
@@ -168,13 +219,9 @@ async function launch(
   id: string,
   root: string,
   session: string,
+  { rexSession, terminal }: TerminalLocation,
 ): Promise<void> {
-  const { REX_SESSION: rexSession, REX_BLOCK: terminal } = process.env;
-  if (
-    !rexId(rexSession, "session") ||
-    session !== rexSession ||
-    !rexId(terminal, "block")
-  )
+  if (session !== rexSession)
     throw new Error("Launch does not match this Rex terminal");
   privateDirectory(root);
   const directory = join(root, id);
@@ -226,13 +273,16 @@ async function launch(
   }
 }
 
-export async function main(args: string[]): Promise<void> {
+export async function main(
+  args: string[],
+  location?: TerminalLocation,
+): Promise<void> {
   const [verb, id, arg, ...extra] = args;
   const root = join(agentDirectory(), "rexlings", "incoming");
   try {
     if (id && uuid.test(id) && !extra.length) {
-      if (verb === "launch" && rexId(arg, "session"))
-        await launch(id, root, arg);
+      if (verb === "launch" && rexId(arg, "session") && location)
+        await launch(id, root, arg, location);
       else if (verb === "read" && (arg === "ready" || arg === "result"))
         process.stdout.write(
           encodeFrame(optionalJson(join(root, id, `${arg}.json`)) ?? null),
@@ -247,4 +297,3 @@ export async function main(args: string[]): Promise<void> {
     process.exitCode = 1;
   }
 }
-import { spawn } from "node:child_process";

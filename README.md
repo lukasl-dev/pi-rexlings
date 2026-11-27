@@ -6,8 +6,9 @@ tab closes and its answer returns to the parent.
 
 ## Setup
 
-Requires `pi` 1.4+ and `rex` on `PATH`, with support for `rex api` and `rex events`.
-Tested on Linux: Pi 1.4.0 and 1.5.2, Rex 0.1.0-preview.22.
+Requires `pi` 1.4+ and `rex` on `PATH`, with support for `rex api`, `rex events`,
+and `rex block inspect`. Tested on Linux: Pi 1.4.0 and 1.5.2 with Rex
+0.1.0-preview.22; Pi 1.6.1 with Rex 0.1.0-preview.25.
 
 ```sh
 pi install git:github.com/lukasl-dev/pi-rexlings

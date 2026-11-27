@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import {
   mkdtempSync,
@@ -19,6 +20,8 @@ import { promisify } from "node:util";
 import { executable, object, parseConfig } from "../../src/config.ts";
 import { Host, type HostOptions } from "../../src/host.ts";
 import type { Run, ChildResult } from "../../src/artifacts.ts";
+import { Rex } from "../../src/rex.ts";
+import { runtimeBundle, runtimeCommand } from "../../src/runtime.ts";
 
 const exec = promisify(execFile);
 const cli =
@@ -601,6 +604,46 @@ test(
       /explicit session/,
     );
     assert.equal(host.runs.size, 0);
+
+    const rex = new Rex(destination.env);
+    await rex.identity();
+    const { digest, payload } = runtimeBundle();
+    const { terminal } = await rex.launch(
+      destination.session,
+      "wrong destination",
+      undefined,
+      [
+        executable("env", destination.env),
+        `REX_SESSION=${parent.session}`,
+        ...runtimeCommand(
+          digest,
+          "launch",
+          randomUUID(),
+          parent.session,
+          payload,
+        ),
+      ],
+      true,
+    );
+    try {
+      assert.equal(
+        await until(async () => {
+          const status = await rex.exited(destination.session, terminal);
+          return status === null ? undefined : { status };
+        }, "mismatched runtime exit").then(({ status }) => status),
+        1,
+      );
+      assert.match(
+        await rex.capture(destination.session, terminal),
+        /Runtime destination does not match this Rex terminal/,
+      );
+    } finally {
+      await rex.close(destination.session, terminal);
+    }
+    assert.equal(
+      existsSync(join(destination.env.PI_CODING_AGENT_DIR!, "rexlings")),
+      false,
+    );
 
     const run = await host.launch({ ...input, host: "fixture" });
     assert.equal(run.remoteHost, "fixture");

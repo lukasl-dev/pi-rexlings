@@ -95,7 +95,7 @@ export class Host {
 
   constructor(options: HostOptions) {
     if (!rexId(options.rexSession, "session"))
-      throw new Error("Missing full REX_SESSION ID");
+      throw new Error("Missing full Rex session ID");
     if (!rexId(options.parent, "block"))
       throw new Error("Missing full REX_BLOCK ID");
     this.#options = options;
@@ -482,7 +482,9 @@ export class Host {
     try {
       const blocks = await rex.blocks(rexSession);
       if (ownsParent && !blocks.get(this.#options.parent)?.serverTerminal)
-        throw new Error("REX_BLOCK is not a local terminal in REX_SESSION");
+        throw new Error(
+          "REX_BLOCK is not a local terminal in this Rex session",
+        );
       return { instance, hostId, blocks };
     } catch (error) {
       if (

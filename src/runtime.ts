@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { uuid } from "./artifacts.ts";
+import { inspectTerminal } from "./launch.ts";
 
 const sources = ["launch.ts", "child.ts", "artifacts.ts", "config.ts"];
 
@@ -18,7 +20,11 @@ export function runtimeBundle(): { digest: string; payload: string } {
 }
 
 // This function has no imports or closures: Rex starts it before the bundle exists.
-async function bootstrap(names: string[]) {
+async function bootstrap(
+  names: string[],
+  inspect: typeof inspectTerminal,
+  terminalId: RegExp,
+) {
   const fs = require("node:fs") as typeof import("node:fs");
   const { createHash, randomUUID } =
     require("node:crypto") as typeof import("node:crypto");
@@ -36,11 +42,16 @@ async function bootstrap(names: string[]) {
     throw new Error("Invalid Rexlings runtime request");
   const hash = (text: string) =>
     createHash("sha256").update(text).digest("hex");
-  if (
-    mode === "launch" &&
-    (!payload || hash(payload) !== digest || arg !== process.env.REX_SESSION)
-  )
-    throw new Error("Runtime bundle or Rex destination does not match");
+  let location: ReturnType<typeof inspectTerminal> | undefined;
+  if (mode === "launch") {
+    if (!payload || hash(payload) !== digest)
+      throw new Error("Runtime bundle does not match its digest");
+    const { execFileSync } =
+      require("node:child_process") as typeof import("node:child_process");
+    location = inspect(execFileSync, process.env, terminalId);
+    if (arg !== location.rexSession)
+      throw new Error("Runtime destination does not match this Rex terminal");
+  }
 
   const profile = resolve(
     process.env.PI_CODING_AGENT_DIR || join(homedir(), ".pi", "agent"),
@@ -102,9 +113,9 @@ async function bootstrap(names: string[]) {
   // Keep Pi's local TypeScript loader out of the code sent to the host.
   const load = new Function("url", "return import(url)") as (
     url: string,
-  ) => Promise<{ main: (args: string[]) => Promise<void> }>;
+  ) => Promise<typeof import("./launch.ts")>;
   const { main } = await load(pathToFileURL(join(directory, names[0]!)).href);
-  await main([mode, id, arg]);
+  await main([mode, id, arg], location);
 }
 
 export const nixRuntimeStarting = "Rexlings is starting Nix Node";
@@ -135,7 +146,7 @@ export function runtimeCommand(
   arg: string,
   payload?: string,
 ): string[] {
-  const code = `(${bootstrap.toString()})(${JSON.stringify(sources)}).catch(error => { console.error(error.message); process.exitCode = 1; });`;
+  const code = `(${bootstrap.toString()})(${JSON.stringify(sources)}, (${inspectTerminal.toString()}), ${uuid}).catch(error => { console.error(error.message); process.exitCode = 1; });`;
   return [
     "/bin/sh",
     "-c",

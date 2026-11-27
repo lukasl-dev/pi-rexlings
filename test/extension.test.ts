@@ -22,3 +22,29 @@ test("normal profile discovery does not register a delegation host inside a chil
     else process.env.PI_REXLINGS_RUN_DIR = previous;
   }
 });
+
+test("a Rex block enables the parent without a REX_SESSION variable", () => {
+  const { REX_SESSION, REX_BLOCK, PI_REXLINGS_RUN_DIR } = process.env;
+  delete process.env.REX_SESSION;
+  delete process.env.PI_REXLINGS_RUN_DIR;
+  process.env.REX_BLOCK = "block:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+  const commands: string[] = [];
+  try {
+    extension({
+      registerCommand: (name: string) => commands.push(name),
+      registerMessageRenderer() {},
+      registerTool() {},
+      on() {},
+    } as unknown as ExtensionAPI);
+    assert.deepEqual(commands, ["rexlings"]);
+  } finally {
+    for (const [key, value] of Object.entries({
+      REX_SESSION,
+      REX_BLOCK,
+      PI_REXLINGS_RUN_DIR,
+    })) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
